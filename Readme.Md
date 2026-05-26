@@ -1,155 +1,383 @@
-# Idempotency-Gateway (The "Pay-Once" Protocol)
+# IgirePay Idempotency Payment Gateway
 
-This challenge is designed to test your ability to bridge Computer Science fundamentals with Modern Backend Engineering.
+A production-ready Idempotency Layer built with Java and Spring Boot that guarantees payment requests are processed exactly once, even when clients retry requests due to network failures or timeouts.
 
-## 1. Business Context
-
-> **Client:** IgirePay Technologies Ltd._ (A fast-growing Payment Processor).
-
-### The Problem
-
-IgirePay Technologies's clients (e-commerce shops) occasionally experience network timeouts. When this happens, their servers automatically retry sending payment requests. Recently, this has led to a critical issue: **Double Charging**.
-
-If a customer clicks "Pay," the request is sent, but the network lags. The client retries the request. IgirePay Technologies processes _both_ requests, charging the customer twice. This is causing customer churn and regulatory headaches.
-
-### The Solution
-
-IgirePay Technologies needs you to build an **Idempotency Layer**. This is a middleware service (or API) that ensures no matter how many times a client sends the same request, the payment is processed **exactly once**.
+This project simulates a fintech payment processing backend and prevents duplicate transactions through idempotency protection, concurrency control, and payload validation.
 
 ---
 
-## 2. Technical Objective
+# Features
 
-Build a RESTful API that mimics a payment processing backend. It must check for a unique `Idempotency-Key` in the HTTP headers.
-
-- **First Request:** Process the payment and save the response.
-- **Duplicate Request:** Detect the existing key and return the _saved_ response immediately, without processing the payment again.
-
----
-
-## 3. Getting Started
-
-1.  **Fork this Repository:** Do not clone it directly. Create a fork to your own GitHub account.
-2.  **Environment:** You must use ** Java.**. You may use any database or in-memory store (Redis, SQLite, or a simple native Map/Dictionary variable).
-3.  **Submission:** Your final submission will be a link to your forked repository containing the source code and documentation.
+- Strict idempotency enforcement using `Idempotency-Key`
+- Duplicate request replay without reprocessing
+- SHA-256 request body hashing for payload integrity
+- Concurrent request protection using `ConcurrentHashMap`
+- In-flight request handling using `CompletableFuture`
+- Automatic TTL cleanup for expired idempotency keys
+- Request validation using JSR-303 Bean Validation
+- Production-style layered architecture
+- Global exception handling
+- Thread-safe processing
 
 ---
 
-## 4. The Architecture Diagram
+# Architecture Diagram
 
-**Task:** Before you write any code, you must design the logic flow.
-**Deliverable:** A **Sequence Diagram** or **Flowchart** included in your README.
+```mermaid
+sequenceDiagram
+    participant Client
+    participant Controller
+    participant IdempotencyService
+    participant PaymentProcessor
 
----
+    Client->>Controller: POST /process-payment
 
-## 5. User Stories & Acceptance Criteria
+    Controller->>IdempotencyService: Validate Idempotency-Key
 
-### User Story 1: The First Transaction (Happy Path)
+    alt Existing Key + Same Payload
+        IdempotencyService-->>Controller: Return Cached Response
+        Controller-->>Client: 200 OK + X-Cache-Hit: true
 
-**As a** client system (e.g., an online store),
-**I want to** send a payment request with a unique ID,
-**So that** my transaction is processed successfully.
+    else Existing Key + Different Payload
+        IdempotencyService-->>Controller: Conflict Detected
+        Controller-->>Client: 409 Conflict
 
-**Acceptance Criteria:**
+    else New Request
+        Controller->>IdempotencyService: Register In-Flight Request
+        Controller->>PaymentProcessor: Simulate Payment Processing
 
-- [ ] The API accepts a `POST` request to endpoint `/process-payment`.
-- [ ] The request header must contain `Idempotency-Key: <some-unique-string>`.
-- [ ] The request body accepts a JSON object (e.g., `{"amount": 100, "currency": "RWF"}`).
-- [ ] The server simulates processing (e.g., a 2-second delay) and returns a `200 OK` or `201 Created` response.
-- [ ] The response body should include a status message: `"Charged 100 RWF"`.
+        Note over PaymentProcessor: 2 Second Delay
 
-### User Story 2: The Duplicate Attempt (Idempotency Logic)
-
-**As a** client system,
-**I want to** safely retry a request if I don't hear back,
-**So that** I don't accidentally double-charge the user.
-
-**Acceptance Criteria:**
-
-- [ ] If the client sends a second `POST` request with the **same** `Idempotency-Key` and payload:
-  - [ ] The server must **NOT** run the processing logic again (no 2-second delay).
-  - [ ] The server must return the **exact same** response body and status code as the first successful request.
-  - [ ] The server returns a header `X-Cache-Hit: true` to indicate this was a replayed response.
-
-### User Story 3: Different Request, Same Key (Fraud/Error Check)
-
-**As a** security officer,
-**I want to** reject requests that reuse keys for different payments,
-**So that** we maintain data integrity.
-
-**Acceptance Criteria:**
-
-- [ ] If a request arrives with an existing `Idempotency-Key` but a **different** request body (e.g., changing amount from 100 to 500):
-  - [ ] The server must return a `422 Unprocessable Entity` or `409 Conflict` error.
-  - [ ] The error message should state: `"Idempotency key already used for a different request body."`
+        PaymentProcessor-->>Controller: Payment Success
+        Controller->>IdempotencyService: Save Cached Response
+        Controller-->>Client: 201 Created
+    end
+```
 
 ---
 
-## 6. Bonus User Story (The "In-Flight" Check)
+# Project Structure
 
-**As a** system architect,
-**I want to** handle cases where two identical requests arrive at the exact same time,
-**So that** we don't succumb to race conditions.
+```text
+src/main/java/com/igirepay
 
-**Scenario:** Request A arrives. While Request A is still "processing" (during the 2-second delay), Request B (same key) arrives.
-
-**Acceptance Criteria:**
-
-- [ ] Request B should not start a new process.
-- [ ] Request B should not return `409 Conflict`.
-- [ ] Request B should wait (block) until Request A finishes, and then return the result of Request A.
-
----
-
-## 7. The "Developer's Choice" Challenge
-
-We believe great engineers are also product thinkers.
-
-**Task:** Identify **one** additional feature or safety mechanism that would make this system better for a real-world Fintech company.
-
-1.  **Implement it.**
-2.  **Document it:** Explain _why_ you added it in your README.
+├── controller
+├── dto
+├── exception
+├── model
+├── service
+├── store
+├── util
+└── config
+```
 
 ---
 
-## 8. Documentation Requirements
+# Technologies Used
 
-Your final `README.md` must replace these instructions. It must cover:
-
-1.  **Architecture Diagram**
-2.  **Setup Instructions**
-3.  **API Documentation**
-4.  **Design Decisions**
-5.  **The Developer's Choice:** Description of the extra feature you added.
-
----
-
-Submit your repo link via the [online](https://forms.gle/Hsh5S5doEjTRbXCp8) form.
+- Java 17
+- Spring Boot
+- Maven
+- ConcurrentHashMap
+- CompletableFuture
+- Bean Validation
+- SHA-256 Hashing
 
 ---
 
-## 🛑 Pre-Submission Checklist
+# Setup Instructions
 
-**WARNING:** Before you submit your solution, you **MUST** pass every item on this list.
-If you miss any of these critical steps, your submission will be **automatically rejected** and you will **NOT** be invited to an interview.
+## Prerequisites
 
-### 1. 📂 Repository & Code
+Make sure the following tools are installed:
 
-- [ ] **Public Access:** Is your GitHub repository set to **Public**? (We cannot review private repos).
-- [ ] **Clean Code:** Did you remove unnecessary files (like `node_modules`, `.env` with real keys, or `.DS_Store`)?
-- [ ] **Run Check:** if we clone your repo and run `npm start` (or equivalent), does the server start immediately without crashing?
-
-### 2. 📄 Documentation (Crucial)
-
-- [ ] **Architecture Diagram:** Did you include a visual Diagram (Flowchart or Sequence Diagram) in the README?
-- [ ] **README Swap:** Did you **DELETE** the original instructions (the problem brief) from this file and replace it with your own documentation?
-- [ ] **API Docs:** Is there a clear list of Endpoints and Example Requests in the README?
-
-### 3. 🧹 Git Hygiene
-
-- [ ] **Commit History:** Does your repo have multiple commits with meaningful messages? (A single "Initial Commit" is a red flag).
+- Java 17 or higher
+- Maven
+- Git
 
 ---
 
-**Ready?**
-If you checked all the boxes above, submit your repository link in the application form. Good luck! 🚀
+# Clone Repository
+
+```bash
+git clone https://github.com/Aline-CROIRE/SheCanCode-associate-Assessment-.git
+cd SheCanCode-associate-Assessment-
+```
+
+---
+
+# Run Application
+
+## Linux / macOS
+
+```bash
+./mvnw spring-boot:run
+```
+
+## Windows
+
+```bash
+mvnw.cmd spring-boot:run
+```
+
+The server will start on:
+
+```text
+http://localhost:8080
+```
+
+---
+
+# API Documentation
+
+# Process Payment
+
+## Endpoint
+
+```http
+POST /process-payment
+```
+
+---
+
+## Headers
+
+```http
+Idempotency-Key: unique-request-key
+Content-Type: application/json
+```
+
+---
+
+## Request Body
+
+```json
+{
+  "amount": 100.0,
+  "currency": "RWF"
+}
+```
+
+---
+
+# Successful First Request
+
+## Response
+
+```http
+201 Created
+```
+
+```json
+{
+  "message": "Charged 100.0 RWF"
+}
+```
+
+---
+
+# Duplicate Request With Same Payload
+
+If the same request is sent again using the same `Idempotency-Key` and identical payload:
+
+## Response
+
+```http
+201 Created
+X-Cache-Hit: true
+```
+
+```json
+{
+  "message": "Charged 100.0 RWF"
+}
+```
+
+The payment is not processed again.
+
+---
+
+# Duplicate Request With Different Payload
+
+If the same `Idempotency-Key` is reused with a different request body:
+
+## Response
+
+```http
+409 Conflict
+```
+
+```json
+{
+  "error": "Idempotency key already used for a different request body."
+}
+```
+
+---
+
+# Example cURL Requests
+
+## First Request
+
+```bash
+curl -X POST http://localhost:8080/process-payment \
+-H "Content-Type: application/json" \
+-H "Idempotency-Key: payment-123" \
+-d '{"amount":100.0,"currency":"RWF"}'
+```
+
+---
+
+## Replay Request
+
+```bash
+curl -X POST http://localhost:8080/process-payment \
+-H "Content-Type: application/json" \
+-H "Idempotency-Key: payment-123" \
+-d '{"amount":100.0,"currency":"RWF"}'
+```
+
+---
+
+## Conflict Request
+
+```bash
+curl -X POST http://localhost:8080/process-payment \
+-H "Content-Type: application/json" \
+-H "Idempotency-Key: payment-123" \
+-d '{"amount":500.0,"currency":"RWF"}'
+```
+
+---
+
+# Concurrency Handling
+
+This project safely handles concurrent requests using:
+
+- `ConcurrentHashMap`
+- `CompletableFuture`
+
+If two identical requests arrive simultaneously:
+
+- Only one request processes the payment
+- The second request waits for the first request to complete
+- Both requests receive the exact same response
+- Double charging is prevented
+
+---
+
+# Developer's Choice Feature
+
+# Input Validation
+
+This project includes request validation using JSR-303 Bean Validation.
+
+## Why This Feature Was Added
+
+In real fintech systems, invalid payment data can cause:
+
+- Financial inconsistencies
+- Database corruption
+- Fraud risks
+- Failed settlements
+
+To prevent this, the system validates all incoming requests before processing.
+
+---
+
+# Validation Rules
+
+- Amount must be greater than zero
+- Currency must not be empty
+- Invalid requests are rejected immediately
+
+---
+
+# TTL Expiration System
+
+The system automatically removes expired idempotency records after 10 minutes.
+
+## Benefits
+
+- Prevents memory leaks
+- Reduces replay attack risks
+- Improves long-term system performance
+- Mimics real-world payment gateway behavior
+
+A scheduled cleanup task runs every 60 seconds.
+
+---
+
+# Technical Design Decisions
+
+## ConcurrentHashMap
+
+Used for fast in-memory storage with thread-safe access.
+
+## CompletableFuture
+
+Used to coordinate concurrent in-flight requests safely.
+
+## SHA-256 Hashing
+
+Used to verify request body integrity and detect payload tampering.
+
+## Scheduled Cleanup
+
+Used to automatically remove expired idempotency records.
+
+---
+
+# Testing Scenarios
+
+The application supports the following scenarios:
+
+- First successful payment request
+- Duplicate request replay
+- Conflict detection for modified payloads
+- Concurrent identical requests
+- Validation failure handling
+- Expired key cleanup
+
+---
+
+# Git Commit Strategy
+
+The project was developed using small, meaningful commits to maintain clean version history and demonstrate proper Git workflow.
+
+Example commit messages:
+
+```text
+Initialize Spring Boot project
+Add payment request DTO
+Implement payment processing endpoint
+Add idempotency key validation
+Implement cached response replay
+Handle concurrent request protection
+Add TTL expiration cleanup
+Implement global exception handling
+Create README documentation
+```
+
+---
+
+# Future Improvements
+
+Possible production-level improvements include:
+
+- Redis-backed distributed storage
+- PostgreSQL persistence
+- Distributed locking
+- OpenAPI / Swagger documentation
+- Docker containerization
+- Rate limiting
+- Authentication and authorization
+- Metrics and monitoring
+
+---
+
+# Author
+
+Aline NIYONIZERA
+
+Backend Engineering Assessment Submission
