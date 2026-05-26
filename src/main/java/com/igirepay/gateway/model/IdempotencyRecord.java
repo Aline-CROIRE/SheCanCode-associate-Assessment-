@@ -11,4 +11,5 @@ import lombok.NoArgsConstructor;
 public class IdempotencyRecord {
     private String requestHash;
     private PaymentResponse response;
+    private long createdAt;
 }

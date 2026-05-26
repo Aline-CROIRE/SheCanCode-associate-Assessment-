@@ -3,6 +3,7 @@ package com.igirepay.gateway.service;
 import com.igirepay.gateway.dto.PaymentResponse;
 import com.igirepay.gateway.model.IdempotencyRecord;
 import org.springframework.http.ResponseEntity;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import java.nio.charset.StandardCharsets;
@@ -16,11 +17,11 @@ import java.util.concurrent.ConcurrentHashMap;
 @Service
 public class IdempotencyService {
 
-    // Final storage for completed requests
     private final Map<String, IdempotencyRecord> storage = new ConcurrentHashMap<>();
-
-    // Temporary storage for requests currently being processed
     private final Map<String, CompletableFuture<ResponseEntity<?>>> inflightRequests = new ConcurrentHashMap<>();
+
+    // 10 minutes in milliseconds
+    private static final long TTL_LIMIT = 10 * 60 * 1000;
 
     public String generateHash(Object body) {
         try {
@@ -42,10 +43,17 @@ public class IdempotencyService {
     }
 
     public void saveRecord(String key, String hash, PaymentResponse response) {
-        storage.put(key, new IdempotencyRecord(hash, response));
+        storage.put(key, new IdempotencyRecord(hash, response, System.currentTimeMillis()));
     }
 
     public Map<String, CompletableFuture<ResponseEntity<?>>> getInflightRequests() {
         return inflightRequests;
+    }
+
+    // Runs every 60 seconds
+    @Scheduled(fixedRate = 60000)
+    public void cleanExpiredRecords() {
+        long now = System.currentTimeMillis();
+        storage.entrySet().removeIf(entry -> (now - entry.getValue().getCreatedAt()) > TTL_LIMIT);
     }
 }
