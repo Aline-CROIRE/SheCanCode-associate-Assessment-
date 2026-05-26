@@ -29,7 +29,7 @@ public class PaymentController {
             @RequestHeader(value = "Idempotency-Key", required = true) String idempotencyKey,
             @RequestBody PaymentRequest paymentRequest) throws ExecutionException, InterruptedException {
 
-        // --- DEFENSIVE VALIDATION (Developer's Choice Feature) ---
+
         if (paymentRequest.getAmount() == null || paymentRequest.getAmount() <= 0) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                     .body(new ErrorResponse("VALIDATION_ERROR", "Amount must be greater than 0"));
@@ -38,11 +38,11 @@ public class PaymentController {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                     .body(new ErrorResponse("VALIDATION_ERROR", "Currency is required"));
         }
-        // ---------------------------------------------------------
+        
 
         String currentRequestHash = idempotencyService.generateHash(paymentRequest);
 
-        // 1. Check completed requests
+     
         if (idempotencyService.isKeyPresent(idempotencyKey)) {
             IdempotencyRecord record = idempotencyService.getRecord(idempotencyKey);
             if (!record.getRequestHash().equals(currentRequestHash)) {
@@ -52,7 +52,7 @@ public class PaymentController {
             return ResponseEntity.ok().header("X-Cache-Hit", "true").body(record.getResponse());
         }
 
-        // 2. Handle Concurrency
+   
         CompletableFuture<ResponseEntity<?>> newFuture = new CompletableFuture<>();
         CompletableFuture<ResponseEntity<?>> existingFuture = idempotencyService.getInflightRequests()
                 .putIfAbsent(idempotencyKey, newFuture);
@@ -62,7 +62,7 @@ public class PaymentController {
         }
 
         try {
-            // Simulate 2-second processing
+            
             Thread.sleep(2000);
 
             String message = "Charged " + paymentRequest.getAmount() + " " + paymentRequest.getCurrency();
