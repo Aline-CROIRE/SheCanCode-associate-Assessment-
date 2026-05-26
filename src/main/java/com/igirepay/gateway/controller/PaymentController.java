@@ -1,10 +1,10 @@
 package com.igirepay.gateway.controller;
 
+import com.igirepay.gateway.dto.ErrorResponse;
 import com.igirepay.gateway.dto.PaymentRequest;
 import com.igirepay.gateway.dto.PaymentResponse;
 import com.igirepay.gateway.model.IdempotencyRecord;
 import com.igirepay.gateway.service.IdempotencyService;
-import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -27,10 +27,22 @@ public class PaymentController {
     @PostMapping("/process-payment")
     public ResponseEntity<?> processPayment(
             @RequestHeader(value = "Idempotency-Key", required = true) String idempotencyKey,
-            @Valid @RequestBody PaymentRequest paymentRequest) throws ExecutionException, InterruptedException {
+            @RequestBody PaymentRequest paymentRequest) throws ExecutionException, InterruptedException {
+
+        // --- DEFENSIVE VALIDATION (Developer's Choice Feature) ---
+        if (paymentRequest.getAmount() == null || paymentRequest.getAmount() <= 0) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(new ErrorResponse("VALIDATION_ERROR", "Amount must be greater than 0"));
+        }
+        if (paymentRequest.getCurrency() == null || paymentRequest.getCurrency().trim().isEmpty()) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(new ErrorResponse("VALIDATION_ERROR", "Currency is required"));
+        }
+        // ---------------------------------------------------------
 
         String currentRequestHash = idempotencyService.generateHash(paymentRequest);
 
+        // 1. Check completed requests
         if (idempotencyService.isKeyPresent(idempotencyKey)) {
             IdempotencyRecord record = idempotencyService.getRecord(idempotencyKey);
             if (!record.getRequestHash().equals(currentRequestHash)) {
@@ -40,6 +52,7 @@ public class PaymentController {
             return ResponseEntity.ok().header("X-Cache-Hit", "true").body(record.getResponse());
         }
 
+        // 2. Handle Concurrency
         CompletableFuture<ResponseEntity<?>> newFuture = new CompletableFuture<>();
         CompletableFuture<ResponseEntity<?>> existingFuture = idempotencyService.getInflightRequests()
                 .putIfAbsent(idempotencyKey, newFuture);
@@ -49,13 +62,18 @@ public class PaymentController {
         }
 
         try {
+            // Simulate 2-second processing
             Thread.sleep(2000);
+
             String message = "Charged " + paymentRequest.getAmount() + " " + paymentRequest.getCurrency();
             PaymentResponse response = new PaymentResponse(message);
+
             idempotencyService.saveRecord(idempotencyKey, currentRequestHash, response);
+
             ResponseEntity<PaymentResponse> finalResponse = ResponseEntity.ok(response);
             newFuture.complete(finalResponse);
             return finalResponse;
+
         } catch (Exception e) {
             newFuture.completeExceptionally(e);
             throw e;
