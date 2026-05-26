@@ -341,26 +341,6 @@ The application supports the following scenarios:
 
 ---
 
-# Git Commit Strategy
-
-The project was developed using small, meaningful commits to maintain clean version history and demonstrate proper Git workflow.
-
-Example commit messages:
-
-```text
-Initialize Spring Boot project
-Add payment request DTO
-Implement payment processing endpoint
-Add idempotency key validation
-Implement cached response replay
-Handle concurrent request protection
-Add TTL expiration cleanup
-Implement global exception handling
-Create README documentation
-```
-
----
-
 # Future Improvements
 
 Possible production-level improvements include:
